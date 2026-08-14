@@ -1,102 +1,138 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-font="inter">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Factory - Multi-Machine HMI Dashboard</title>
+  <title>Enterprise SCADA / MES HMI System</title>
 
-  <!-- Load MQTT.js & Chart.js via CDN -->
+  <!-- CDNs for MQTT & Chart.js -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Roboto+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
-      --bg-dark: #0b1329;
+      --font-family: 'Inter', sans-serif;
+      --transition-speed: 0.3s;
+    }
+
+    /* DARK THEME */
+    [data-theme="dark"] {
+      --bg-main: #0b1329;
+      --bg-sidebar: #080f21;
       --card-bg: #16223f;
       --border-color: #233559;
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
       --accent-blue: #38bdf8;
       --accent-orange: #f97316;
-      --green-bg: #15803d;
+      --accent-red: #ef4444;
+      --green-bg: rgba(34, 197, 94, 0.15);
       --green-text: #4ade80;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
+
+    /* LIGHT THEME (WHITE MODE) */
+    [data-theme="light"] {
+      --bg-main: #f1f5f9;
+      --bg-sidebar: #ffffff;
+      --card-bg: #ffffff;
+      --border-color: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --accent-blue: #0284c7;
+      --accent-orange: #ea580c;
+      --accent-red: #dc2626;
+      --green-bg: #dcfce7;
+      --green-text: #16a34a;
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    /* FONTS */
+    [data-font="inter"] { --font-family: 'Inter', sans-serif; }
+    [data-font="mono"] { --font-family: 'Roboto Mono', monospace; }
+    [data-font="segoe"] { --font-family: 'Segoe UI', sans-serif; }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background-color: var(--bg-dark);
+      font-family: var(--font-family);
+      background-color: var(--bg-main);
       color: var(--text-main);
       display: flex;
       height: 100vh;
       overflow: hidden;
+      transition: background-color var(--transition-speed), color var(--transition-speed);
     }
 
-    /* --- SIDEBAR NAV --- */
+    /* SIDEBAR NAV (COLLAPSIBLE) */
     .sidebar {
-      width: 260px;
-      background-color: #0d1730;
+      width: 280px;
+      background-color: var(--bg-sidebar);
       border-right: 1px solid var(--border-color);
       display: flex;
       flex-direction: column;
       padding: 20px;
+      transition: transform var(--transition-speed) ease, margin-left var(--transition-speed) ease;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .sidebar.collapsed {
+      margin-left: -280px;
     }
 
     .brand {
       font-size: 18px;
       font-weight: 800;
       color: var(--accent-blue);
-      margin-bottom: 30px;
+      margin-bottom: 25px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
     }
 
-    .section-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--text-muted);
-      margin-bottom: 12px;
-    }
+    .machine-list { display: flex; flex-direction: column; gap: 12px; }
 
-    .machine-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .machine-btn {
+    .machine-card {
       background-color: var(--card-bg);
       border: 1px solid var(--border-color);
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 14px;
-      color: var(--text-main);
       cursor: pointer;
-      text-align: left;
       transition: all 0.2s;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      gap: 8px;
     }
 
-    .machine-btn:hover { border-color: var(--accent-blue); }
+    .machine-card:hover { border-color: var(--accent-blue); }
 
-    .machine-btn.active {
+    .machine-card.active {
       border-color: var(--accent-blue);
-      background-color: #1e2e54;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
     }
 
-    .machine-btn .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: var(--green-text);
+    .machine-header { display: flex; justify-content: space-between; align-items: center; }
+    .machine-name { font-weight: 700; font-size: 14px; }
+
+    .rename-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
-    /* --- MAIN CONTENT AREA --- */
+    .rename-btn:hover { color: var(--accent-blue); background: var(--border-color); }
+
+    /* MAIN CONTENT AREA */
     .main-content {
       flex: 1;
       padding: 25px;
@@ -104,6 +140,7 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+      width: 100%;
     }
 
     .top-bar {
@@ -114,62 +151,118 @@
       border-bottom: 1px solid var(--border-color);
     }
 
-    .connection-badge {
+    .controls-group { display: flex; align-items: center; gap: 10px; }
+
+    .icon-btn {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .icon-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+    /* NOTIFICATION DRAWER */
+    .notification-wrapper { position: relative; }
+    .badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: var(--accent-red);
+      color: white;
+      border-radius: 50%;
+      padding: 2px 6px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .notification-drawer {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 45px;
+      width: 360px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 15px;
+      z-index: 200;
+    }
+
+    .notification-drawer.open { display: block; }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .notification-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-color);
       font-size: 12px;
-      padding: 6px 14px;
-      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .alarm-banner {
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--accent-red);
+      color: var(--accent-red);
+      padding: 12px 20px;
+      border-radius: 10px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
       font-weight: 700;
-      text-transform: uppercase;
+      animation: pulse 1.5s infinite;
     }
 
-    .online { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; }
-    .offline { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; }
-
-    /* --- SIDE-BY-SIDE METRICS GRID --- */
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
     }
+
+    /* METRICS GRID */
+    .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 
     .card {
       background-color: var(--card-bg);
       border: 1px solid var(--border-color);
       border-radius: 14px;
       padding: 20px;
+      box-shadow: var(--shadow);
     }
 
-    .card-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .metric-value {
-      font-size: 42px;
-      font-weight: 800;
-      margin: 10px 0;
-    }
-
+    .card-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+    .metric-value { font-size: 40px; font-weight: 800; margin: 10px 0; }
     .pv-color { color: var(--accent-blue); }
     .sv-color { color: var(--accent-orange); }
 
-    .control-box {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
+    .control-box { display: flex; gap: 8px; margin-top: 10px; }
 
-    input[type="number"] {
+    input[type="number"], select {
       width: 100%;
       padding: 10px;
-      background: var(--bg-dark);
+      background: var(--bg-main);
       border: 1px solid var(--border-color);
-      color: #fff;
+      color: var(--text-main);
       border-radius: 8px;
-      font-size: 16px;
-      text-align: center;
+      font-size: 14px;
     }
 
     button.btn-send {
@@ -184,7 +277,6 @@
 
     button.btn-send:hover { opacity: 0.9; }
 
-    /* --- CHART PANEL --- */
     .chart-card {
       background-color: var(--card-bg);
       border: 1px solid var(--border-color);
@@ -192,100 +284,176 @@
       padding: 20px;
       flex: 1;
       min-height: 320px;
+      box-shadow: var(--shadow);
     }
+
+    .connection-badge {
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .online { background-color: var(--green-bg); color: var(--green-text); border: 1px solid var(--green-text); }
+    .offline { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; }
   </style>
 </head>
 <body>
 
-  <!-- LEFT SIDEBAR: MACHINE SELECTOR -->
-  <div class="sidebar">
-    <div class="brand">⚡ SCADA / MES VIEW</div>
-    <div class="section-title">Connected Machines</div>
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="brand">
+      <span>⚡ SCADA / MES VIEW</span>
+      <button class="rename-btn" onclick="toggleSidebar()" title="Collapse Sidebar">◀</button>
+    </div>
+    
+    <div class="card-label" style="margin-bottom: 12px;">Connected Machines</div>
+    
     <div class="machine-list">
-      <button class="machine-btn active" onclick="selectMachine('furnace_1')">
-        <div>
-          <div style="font-weight: 700;">Furnace #1</div>
-          <div style="font-size: 11px; color: var(--text-muted);" id="f1-pv-sub">PV: --.- °C</div>
+      <div class="machine-card active" id="card-furnace_1" onclick="selectMachine('furnace_1')">
+        <div class="machine-header">
+          <span class="machine-name" id="name-furnace_1">Furnace #1</span>
+          <button class="rename-btn" onclick="event.stopPropagation(); renameMachine('furnace_1')">✏️</button>
         </div>
-        <div class="status-dot"></div>
-      </button>
+        <div style="font-size: 12px; color: var(--text-muted);" id="sub-furnace_1">PV: --.- °C</div>
+      </div>
 
-      <button class="machine-btn" onclick="selectMachine('furnace_2')">
-        <div>
-          <div style="font-weight: 700;">Furnace #2</div>
-          <div style="font-size: 11px; color: var(--text-muted);" id="f2-pv-sub">PV: --.- °C</div>
+      <div class="machine-card" id="card-furnace_2" onclick="selectMachine('furnace_2')">
+        <div class="machine-header">
+          <span class="machine-name" id="name-furnace_2">Furnace #2</span>
+          <button class="rename-btn" onclick="event.stopPropagation(); renameMachine('furnace_2')">✏️</button>
         </div>
-        <div class="status-dot"></div>
-      </button>
+        <div style="font-size: 12px; color: var(--text-muted);" id="sub-furnace_2">PV: --.- °C</div>
+      </div>
 
-      <button class="machine-btn" onclick="selectMachine('furnace_3')">
-        <div>
-          <div style="font-weight: 700;">Furnace #3</div>
-          <div style="font-size: 11px; color: var(--text-muted);" id="f3-pv-sub">PV: --.- °C</div>
+      <div class="machine-card" id="card-furnace_3" onclick="selectMachine('furnace_3')">
+        <div class="machine-header">
+          <span class="machine-name" id="name-furnace_3">Furnace #3</span>
+          <button class="rename-btn" onclick="event.stopPropagation(); renameMachine('furnace_3')">✏️</button>
         </div>
-        <div class="status-dot"></div>
-      </button>
+        <div style="font-size: 12px; color: var(--text-muted);" id="sub-furnace_3">PV: --.- °C</div>
+      </div>
     </div>
   </div>
 
   <!-- MAIN DASHBOARD CONTENT -->
   <div class="main-content">
+    
+    <!-- TOP NAVBAR -->
     <div class="top-bar">
-      <div>
-        <h1 id="selected-machine-title" style="font-size: 24px;">Heat Furnace #1</h1>
-        <div style="font-size: 12px; color: var(--text-muted);">Topic: <span id="active-topic-display">factory/furnace_1/temp/pv</span></div>
+      <div style="display: flex; align-items: center; gap: 15px;">
+        <button class="icon-btn" onclick="toggleSidebar()">☰ Menu</button>
+        <div>
+          <h1 id="selected-machine-title" style="font-size: 22px;">Furnace #1</h1>
+          <div style="font-size: 11px; color: var(--text-muted);">Topic: <span id="active-topic-display">factory/furnace_1/temp/pv</span></div>
+        </div>
       </div>
-      <div id="conn-status" class="connection-badge offline">Connecting...</div>
+
+      <div class="controls-group">
+        <div id="conn-status" class="connection-badge offline">Connecting...</div>
+
+        <!-- NOTIFICATION CENTER & ALARM DRAWER -->
+        <div class="notification-wrapper">
+          <button class="icon-btn" onclick="toggleNotifications()">
+            🔔 Alarms <span class="badge" id="notif-count">0</span>
+          </button>
+          <div class="notification-drawer" id="notif-drawer">
+            <div class="drawer-header">
+              <span style="font-weight: bold; font-size: 13px;">Alarm History & Logs</span>
+              <button class="icon-btn" style="padding: 4px 8px; font-size: 11px;" onclick="exportAlarmsCSV()">📥 Export Alarms CSV</button>
+            </div>
+            <div id="notif-list" style="max-height: 250px; overflow-y: auto;">
+              <div class="notification-item" style="color: var(--text-muted);">No active alarms recorded.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FULL TELEMETRY REPORT EXPORT -->
+        <button class="icon-btn" onclick="exportCSVReport()">📊 Telemetry CSV</button>
+
+        <!-- THEME SELECTOR -->
+        <select onchange="changeTheme(this.value)" style="width: 110px; padding: 8px;">
+          <option value="dark">🌙 Dark Mode</option>
+          <option value="light">☀️ White Mode</option>
+        </select>
+
+        <!-- FONT SELECTOR -->
+        <select onchange="changeFont(this.value)" style="width: 110px; padding: 8px;">
+          <option value="inter">Sans (Inter)</option>
+          <option value="mono">Mono SCADA</option>
+          <option value="segoe">Segoe UI</option>
+        </select>
+      </div>
     </div>
 
-    <!-- SIDE-BY-SIDE METRICS -->
+    <!-- HIGH TEMPERATURE ALARM BANNER -->
+    <div class="alarm-banner" id="high-temp-alarm">
+      ⚠️ CRITICAL HIGH TEMPERATURE ALARM: PV IS OVER HIGH THRESHOLD (80°C)!
+    </div>
+
+    <!-- METRICS -->
     <div class="metrics-grid">
-      <!-- Present Value (PV) Card -->
       <div class="card">
         <div class="card-label">Present Value (PV)</div>
         <div class="metric-value pv-color"><span id="pv-val">--.-</span> °C</div>
         <div style="font-size: 12px; color: var(--text-muted);" id="status-val">STATUS: STANDBY</div>
       </div>
 
-      <!-- Set Value (SV) Card -->
       <div class="card">
         <div class="card-label">Target Set Value (SV)</div>
         <div class="metric-value sv-color"><span id="sv-val">50.0</span> °C</div>
-        <div style="font-size: 12px; color: var(--text-muted);">Current Active Target</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Active Target Setpoint</div>
       </div>
 
-      <!-- Control Setpoint Card -->
       <div class="card">
         <div class="card-label">Update Setpoint Target</div>
-        <div class="control-box" style="margin-top: 15px;">
+        <div class="control-box">
           <input type="number" id="new-sv-input" value="65.0" step="0.5" />
           <button class="btn-send" onclick="sendSetpoint()">Publish</button>
         </div>
-        <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">Publishes command directly to PLC</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Direct PLC Setpoint Adjustment</div>
       </div>
     </div>
 
-    <!-- LIVE TREND GRAPH -->
+    <!-- REAL-TIME GRAPH -->
     <div class="chart-card">
-      <div class="card-label" style="margin-bottom: 15px;">Real-Time Temperature Curve (PV vs SV)</div>
+      <div class="card-label" style="margin-bottom: 15px;">Real-Time Temperature Trend (PV vs SV)</div>
       <canvas id="tempChart"></canvas>
     </div>
   </div>
 
   <script>
-    // --- HIVEMQ CLOUD CONFIGURATION ---
     const BROKER_URL = 'wss://7a629778ebd14dd1866939c6fbfc7b60.s1.eu.hivemq.cloud:8884/mqtt';
-    const USERNAME = 'SanjayKerannavar';  // Replace with your username
-    const PASSWORD = 'Sanjay@123';  // Replace with your password
+    const USERNAME = 'SanjayKerannavar';
+    const PASSWORD = 'Sanjay@123'; // Replace with password
 
     let activeMachine = 'furnace_1';
-    const machineData = {
-      furnace_1: { pv: 0, sv: 50.0, historyPV: [], historySV: [], labels: [] },
-      furnace_2: { pv: 0, sv: 60.0, historyPV: [], historySV: [], labels: [] },
-      furnace_3: { pv: 0, sv: 40.0, historyPV: [], historySV: [], labels: [] }
+    let alarmLogs = []; // Stores complete alarm history for export
+
+    // LOAD SAVED CUSTOM MACHINE NAMES FROM LOCAL STORAGE IF THEY EXIST
+    const savedNames = JSON.parse(localStorage.getItem('scada_machine_names')) || {
+      furnace_1: 'Furnace #1',
+      furnace_2: 'Furnace #2',
+      furnace_3: 'Furnace #3'
     };
 
-    // --- SETUP CHART.JS TREND GRAPH ---
+    const machineData = {
+      furnace_1: { name: savedNames.furnace_1, pv: 0, sv: 50.0, historyPV: [], historySV: [], labels: [] },
+      furnace_2: { name: savedNames.furnace_2, pv: 0, sv: 60.0, historyPV: [], historySV: [], labels: [] },
+      furnace_3: { name: savedNames.furnace_3, pv: 0, sv: 40.0, historyPV: [], historySV: [], labels: [] }
+    };
+
+    // UPDATE INITIAL UI NAMES FROM STORED DATA
+    document.addEventListener("DOMContentLoaded", () => {
+      for (const [key, m] of Object.entries(machineData)) {
+        const nameElement = document.getElementById(`name-${key}`);
+        if (nameElement) nameElement.innerText = m.name;
+      }
+      document.getElementById('selected-machine-title').innerText = machineData[activeMachine].name;
+    });
+
+    // SETUP CHART.JS
     const ctx = document.getElementById('tempChart').getContext('2d');
     const trendChart = new Chart(ctx, {
       type: 'line',
@@ -313,34 +481,25 @@
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          x: { grid: { color: '#233559' }, ticks: { color: '#94a3b8' } },
-          y: { grid: { color: '#233559' }, ticks: { color: '#94a3b8' } }
-        },
-        plugins: { legend: { labels: { color: '#f8fafc' } } }
+          x: { grid: { color: 'rgba(148, 163, 184, 0.1)' } },
+          y: { grid: { color: 'rgba(148, 163, 184, 0.1)' } }
+        }
       }
     });
 
-    // --- CONNECT MQTT WEBSOCKETS ---
-    const client = mqtt.connect(BROKER_URL, {
-      username: USERNAME,
-      password: PASSWORD,
-      clean: true
-    });
+    // CONNECT MQTT
+    const client = mqtt.connect(BROKER_URL, { username: USERNAME, password: PASSWORD, clean: true });
 
     client.on('connect', () => {
       document.getElementById('conn-status').className = 'connection-badge online';
       document.getElementById('conn-status').innerText = 'Online';
-
-      // Subscribe to ALL furnaces using wildcard (+)
       client.subscribe('factory/+/temp/pv');
     });
 
     client.on('message', (topic, message) => {
       try {
         const payload = JSON.parse(message.toString());
-        // Extract machine name from topic: factory/furnace_1/temp/pv -> furnace_1
-        const topicParts = topic.split('/');
-        const machineKey = topicParts[1];
+        const machineKey = topic.split('/')[1];
 
         if (machineData[machineKey]) {
           const now = new Date().toLocaleTimeString();
@@ -351,22 +510,25 @@
           m.historySV.push(m.sv);
           m.labels.push(now);
 
-          // Keep max 20 data points for performance
           if (m.historyPV.length > 20) {
             m.historyPV.shift();
             m.historySV.shift();
             m.labels.shift();
           }
 
-          // Update sidebar overview label
-          const subLabel = document.getElementById(`${machineKey.replace('furnace_', 'f')}-pv-sub`);
-          if (subLabel) subLabel.innerText = `PV: ${payload.pv.toFixed(1)} °C`;
+          document.getElementById(`sub-${machineKey}`).innerText = `PV: ${payload.pv.toFixed(1)} °C`;
 
-          // If this is currently the active machine, update screen & chart
+          // HIGH TEMP ALARM LOGIC (> 80°C)
+          if (payload.pv > 80.0) {
+            triggerAlarm(machineKey, m.name, payload.pv, now);
+          } else if (machineKey === activeMachine) {
+            document.getElementById('high-temp-alarm').style.display = 'none';
+          }
+
           if (machineKey === activeMachine) {
             document.getElementById('pv-val').innerText = payload.pv.toFixed(1);
             document.getElementById('status-val').innerText = `STATUS: ${payload.status}`;
-            
+
             trendChart.data.labels = m.labels;
             trendChart.data.datasets[0].data = m.historyPV;
             trendChart.data.datasets[1].data = m.historySV;
@@ -376,39 +538,136 @@
       } catch (e) { console.error('Data error:', e); }
     });
 
-    // --- SWITCH MACHINE SELECTION ---
+    // RENAME MACHINE & SAVE PERSISTENTLY
+    function renameMachine(machineKey) {
+      const currentName = machineData[machineKey].name;
+      const newName = prompt('Enter custom machine name:', currentName);
+      if (newName && newName.trim() !== '') {
+        const cleanName = newName.trim();
+        machineData[machineKey].name = cleanName;
+        document.getElementById(`name-${machineKey}`).innerText = cleanName;
+
+        if (machineKey === activeMachine) {
+          document.getElementById('selected-machine-title').innerText = cleanName;
+        }
+
+        // Save to browser localStorage
+        const nameMap = {
+          furnace_1: machineData.furnace_1.name,
+          furnace_2: machineData.furnace_2.name,
+          furnace_3: machineData.furnace_3.name
+        };
+        localStorage.setItem('scada_machine_names', JSON.stringify(nameMap));
+      }
+    }
+
+    // SIDEBAR TOGGLE & AUTO-COLLAPSE
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
     function selectMachine(machineKey) {
       activeMachine = machineKey;
-      
-      // Update Active Button styling
-      document.querySelectorAll('.machine-btn').forEach(btn => btn.classList.remove('active'));
-      event.currentTarget.classList.add('active');
-
-      const name = machineKey.replace('_', ' ').toUpperCase();
-      document.getElementById('selected-machine-title').innerText = name;
-      document.getElementById('active-topic-display').innerText = `factory/${machineKey}/temp/pv`;
+      document.querySelectorAll('.machine-card').forEach(card => card.classList.remove('active'));
+      document.getElementById(`card-${machineKey}`).classList.add('active');
 
       const m = machineData[machineKey];
+      document.getElementById('selected-machine-title').innerText = m.name;
+      document.getElementById('active-topic-display').innerText = `factory/${machineKey}/temp/pv`;
+
       document.getElementById('pv-val').innerText = m.pv ? m.pv.toFixed(1) : '--.-';
       document.getElementById('sv-val').innerText = m.sv.toFixed(1);
 
-      // Refresh Chart
       trendChart.data.labels = m.labels;
       trendChart.data.datasets[0].data = m.historyPV;
       trendChart.data.datasets[1].data = m.historySV;
       trendChart.update();
+
+      // AUTO-COLLAPSE SIDEBAR
+      document.getElementById('sidebar').classList.add('collapsed');
     }
 
-    // --- PUBLISH NEW SETPOINT TO ACTIVE MACHINE ---
+    // PUBLISH SETPOINT
     function sendSetpoint() {
       const newSV = parseFloat(document.getElementById('new-sv-input').value);
       const topicSV = `factory/${activeMachine}/temp/sv`;
-      
+
       machineData[activeMachine].sv = newSV;
       document.getElementById('sv-val').innerText = newSV.toFixed(1);
 
       client.publish(topicSV, JSON.stringify({ sv: newSV }));
-      alert(`Sent new setpoint (${newSV} °C) to ${activeMachine}!`);
+      alert(`Published Setpoint (${newSV} °C) to ${machineData[activeMachine].name}`);
+    }
+
+    // THEMES & FONTS
+    function changeTheme(theme) { document.documentElement.setAttribute('data-theme', theme); }
+    function changeFont(font) { document.documentElement.setAttribute('data-font', font); }
+
+    // ALARM TRIGGER & HISTORY RECORDING
+    function triggerAlarm(machineKey, machineName, temp, timestamp) {
+      if (activeMachine === machineKey) {
+        document.getElementById('high-temp-alarm').style.display = 'flex';
+      }
+
+      // Avoid duplicate spam within the same second
+      const existingMsg = alarmLogs.find(a => a.timestamp === timestamp && a.machineKey === machineKey);
+      if (!existingMsg) {
+        const alarmEntry = { timestamp, machineKey, machineName, temp: temp.toFixed(1) };
+        alarmLogs.unshift(alarmEntry);
+        updateAlarmUI();
+      }
+    }
+
+    function toggleNotifications() { document.getElementById('notif-drawer').classList.toggle('open'); }
+
+    function updateAlarmUI() {
+      document.getElementById('notif-count').innerText = alarmLogs.length;
+      const listContainer = document.getElementById('notif-list');
+      
+      listContainer.innerHTML = alarmLogs.map(a => `
+        <div class="notification-item">
+          <div style="color: var(--accent-red); font-weight: bold;">⚠️ HIGH TEMP ALARM</div>
+          <div>${a.machineName} reached <strong>${a.temp}°C</strong></div>
+          <div style="color: var(--text-muted); font-size: 10px;">Timestamp: ${a.timestamp}</div>
+        </div>
+      `).join('');
+    }
+
+    // EXPORT ALARMS TO CSV FILE
+    function exportAlarmsCSV() {
+      if (alarmLogs.length === 0) {
+        alert("No alarms recorded yet to export.");
+        return;
+      }
+
+      let csv = "Timestamp,Machine ID,Machine Custom Name,Triggered Temp (°C),Alarm Severity\n";
+      alarmLogs.forEach(a => {
+        csv += `"${a.timestamp}","${a.machineKey}","${a.machineName}",${a.temp},CRITICAL\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `Alarm_History_Log_${new Date().toISOString().slice(0,10)}.csv`);
+      a.click();
+    }
+
+    // EXPORT FULL TELEMETRY REPORT TO CSV
+    function exportCSVReport() {
+      let csvContent = "data:text/csv;charset=utf-8,Machine ID,Machine Name,Timestamp,PV (°C),SV (°C)\n";
+
+      for (const [key, data] of Object.entries(machineData)) {
+        for (let i = 0; i < data.historyPV.length; i++) {
+          csvContent += `${key},"${data.name}",${data.labels[i] || 'N/A'},${data.historyPV[i]},${data.historySV[i]}\n`;
+        }
+      }
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `SCADA_Telemetry_Report_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   </script>
 </body>
