@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Factory - Multi-Machine HMI Dashboard</title>
+
+  <!-- Load MQTT.js & Chart.js via CDN -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #0b1329;
+      --card-bg: #16223f;
+      --border-color: #233559;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --accent-orange: #f97316;
+      --green-bg: #15803d;
+      --green-text: #4ade80;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* --- SIDEBAR NAV --- */
+    .sidebar {
+      width: 260px;
+      background-color: #0d1730;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+    }
+
+    .brand {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--accent-blue);
+      margin-bottom: 30px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .machine-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .machine-btn {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 14px;
+      color: var(--text-main);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .machine-btn:hover { border-color: var(--accent-blue); }
+
+    .machine-btn.active {
+      border-color: var(--accent-blue);
+      background-color: #1e2e54;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+
+    .machine-btn .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--green-text);
+    }
+
+    /* --- MAIN CONTENT AREA --- */
+    .main-content {
+      flex: 1;
+      padding: 25px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .connection-badge {
+      font-size: 12px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .online { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; }
+    .offline { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; }
+
+    /* --- SIDE-BY-SIDE METRICS GRID --- */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .card-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .metric-value {
+      font-size: 42px;
+      font-weight: 800;
+      margin: 10px 0;
+    }
+
+    .pv-color { color: var(--accent-blue); }
+    .sv-color { color: var(--accent-orange); }
+
+    .control-box {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      background: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 16px;
+      text-align: center;
+    }
+
+    button.btn-send {
+      padding: 10px 18px;
+      background: var(--accent-orange);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.btn-send:hover { opacity: 0.9; }
+
+    /* --- CHART PANEL --- */
+    .chart-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 20px;
+      flex: 1;
+      min-height: 320px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LEFT SIDEBAR: MACHINE SELECTOR -->
+  <div class="sidebar">
+    <div class="brand">⚡ SCADA / MES VIEW</div>
+    <div class="section-title">Connected Machines</div>
+    <div class="machine-list">
+      <button class="machine-btn active" onclick="selectMachine('furnace_1')">
+        <div>
+          <div style="font-weight: 700;">Furnace #1</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="f1-pv-sub">PV: --.- °C</div>
+        </div>
+        <div class="status-dot"></div>
+      </button>
+
+      <button class="machine-btn" onclick="selectMachine('furnace_2')">
+        <div>
+          <div style="font-weight: 700;">Furnace #2</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="f2-pv-sub">PV: --.- °C</div>
+        </div>
+        <div class="status-dot"></div>
+      </button>
+
+      <button class="machine-btn" onclick="selectMachine('furnace_3')">
+        <div>
+          <div style="font-weight: 700;">Furnace #3</div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="f3-pv-sub">PV: --.- °C</div>
+        </div>
+        <div class="status-dot"></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <div class="main-content">
+    <div class="top-bar">
+      <div>
+        <h1 id="selected-machine-title" style="font-size: 24px;">Heat Furnace #1</h1>
+        <div style="font-size: 12px; color: var(--text-muted);">Topic: <span id="active-topic-display">factory/furnace_1/temp/pv</span></div>
+      </div>
+      <div id="conn-status" class="connection-badge offline">Connecting...</div>
+    </div>
+
+    <!-- SIDE-BY-SIDE METRICS -->
+    <div class="metrics-grid">
+      <!-- Present Value (PV) Card -->
+      <div class="card">
+        <div class="card-label">Present Value (PV)</div>
+        <div class="metric-value pv-color"><span id="pv-val">--.-</span> °C</div>
+        <div style="font-size: 12px; color: var(--text-muted);" id="status-val">STATUS: STANDBY</div>
+      </div>
+
+      <!-- Set Value (SV) Card -->
+      <div class="card">
+        <div class="card-label">Target Set Value (SV)</div>
+        <div class="metric-value sv-color"><span id="sv-val">50.0</span> °C</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Current Active Target</div>
+      </div>
+
+      <!-- Control Setpoint Card -->
+      <div class="card">
+        <div class="card-label">Update Setpoint Target</div>
+        <div class="control-box" style="margin-top: 15px;">
+          <input type="number" id="new-sv-input" value="65.0" step="0.5" />
+          <button class="btn-send" onclick="sendSetpoint()">Publish</button>
+        </div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">Publishes command directly to PLC</div>
+      </div>
+    </div>
+
+    <!-- LIVE TREND GRAPH -->
+    <div class="chart-card">
+      <div class="card-label" style="margin-bottom: 15px;">Real-Time Temperature Curve (PV vs SV)</div>
+      <canvas id="tempChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // --- HIVEMQ CLOUD CONFIGURATION ---
+    const BROKER_URL = 'wss://7a629778ebd14dd1866939c6fbfc7b60.s1.eu.hivemq.cloud:8884/mqtt';
+    const USERNAME = 'SanjayKerannavar';  // Replace with your username
+    const PASSWORD = 'Sanjay@123';  // Replace with your password
+
+    let activeMachine = 'furnace_1';
+    const machineData = {
+      furnace_1: { pv: 0, sv: 50.0, historyPV: [], historySV: [], labels: [] },
+      furnace_2: { pv: 0, sv: 60.0, historyPV: [], historySV: [], labels: [] },
+      furnace_3: { pv: 0, sv: 40.0, historyPV: [], historySV: [], labels: [] }
+    };
+
+    // --- SETUP CHART.JS TREND GRAPH ---
+    const ctx = document.getElementById('tempChart').getContext('2d');
+    const trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Present Value (PV °C)',
+            data: [],
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'Target Set Value (SV °C)',
+            data: [],
+            borderColor: '#f97316',
+            borderDash: [5, 5],
+            tension: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { grid: { color: '#233559' }, ticks: { color: '#94a3b8' } },
+          y: { grid: { color: '#233559' }, ticks: { color: '#94a3b8' } }
+        },
+        plugins: { legend: { labels: { color: '#f8fafc' } } }
+      }
+    });
+
+    // --- CONNECT MQTT WEBSOCKETS ---
+    const client = mqtt.connect(BROKER_URL, {
+      username: USERNAME,
+      password: PASSWORD,
+      clean: true
+    });
+
+    client.on('connect', () => {
+      document.getElementById('conn-status').className = 'connection-badge online';
+      document.getElementById('conn-status').innerText = 'Online';
+
+      // Subscribe to ALL furnaces using wildcard (+)
+      client.subscribe('factory/+/temp/pv');
+    });
+
+    client.on('message', (topic, message) => {
+      try {
+        const payload = JSON.parse(message.toString());
+        // Extract machine name from topic: factory/furnace_1/temp/pv -> furnace_1
+        const topicParts = topic.split('/');
+        const machineKey = topicParts[1];
+
+        if (machineData[machineKey]) {
+          const now = new Date().toLocaleTimeString();
+          const m = machineData[machineKey];
+
+          m.pv = payload.pv;
+          m.historyPV.push(payload.pv);
+          m.historySV.push(m.sv);
+          m.labels.push(now);
+
+          // Keep max 20 data points for performance
+          if (m.historyPV.length > 20) {
+            m.historyPV.shift();
+            m.historySV.shift();
+            m.labels.shift();
+          }
+
+          // Update sidebar overview label
+          const subLabel = document.getElementById(`${machineKey.replace('furnace_', 'f')}-pv-sub`);
+          if (subLabel) subLabel.innerText = `PV: ${payload.pv.toFixed(1)} °C`;
+
+          // If this is currently the active machine, update screen & chart
+          if (machineKey === activeMachine) {
+            document.getElementById('pv-val').innerText = payload.pv.toFixed(1);
+            document.getElementById('status-val').innerText = `STATUS: ${payload.status}`;
+            
+            trendChart.data.labels = m.labels;
+            trendChart.data.datasets[0].data = m.historyPV;
+            trendChart.data.datasets[1].data = m.historySV;
+            trendChart.update();
+          }
+        }
+      } catch (e) { console.error('Data error:', e); }
+    });
+
+    // --- SWITCH MACHINE SELECTION ---
+    function selectMachine(machineKey) {
+      activeMachine = machineKey;
+      
+      // Update Active Button styling
+      document.querySelectorAll('.machine-btn').forEach(btn => btn.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      const name = machineKey.replace('_', ' ').toUpperCase();
+      document.getElementById('selected-machine-title').innerText = name;
+      document.getElementById('active-topic-display').innerText = `factory/${machineKey}/temp/pv`;
+
+      const m = machineData[machineKey];
+      document.getElementById('pv-val').innerText = m.pv ? m.pv.toFixed(1) : '--.-';
+      document.getElementById('sv-val').innerText = m.sv.toFixed(1);
+
+      // Refresh Chart
+      trendChart.data.labels = m.labels;
+      trendChart.data.datasets[0].data = m.historyPV;
+      trendChart.data.datasets[1].data = m.historySV;
+      trendChart.update();
+    }
+
+    // --- PUBLISH NEW SETPOINT TO ACTIVE MACHINE ---
+    function sendSetpoint() {
+      const newSV = parseFloat(document.getElementById('new-sv-input').value);
+      const topicSV = `factory/${activeMachine}/temp/sv`;
+      
+      machineData[activeMachine].sv = newSV;
+      document.getElementById('sv-val').innerText = newSV.toFixed(1);
+
+      client.publish(topicSV, JSON.stringify({ sv: newSV }));
+      alert(`Sent new setpoint (${newSV} °C) to ${activeMachine}!`);
+    }
+  </script>
+</body>
+</html>
