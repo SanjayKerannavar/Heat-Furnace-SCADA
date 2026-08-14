@@ -49,3 +49,14 @@ A high-performance, real-time industrial SCADA (Supervisory Control and Data Acq
    ```bash
    git clone [https://github.com/YOUR_GITHUB_USERNAME/heat-furnace-scada.git](https://github.com/YOUR_GITHUB_USERNAME/heat-furnace-scada.git)
    cd heat-furnace-scada
+
+   ---
+
+## 🛠️ How to Add This File to GitHub
+
+1. Go to your **`heat-furnace-scada`** repository on GitHub.
+2. If you see a button that says **"Add a README"**, click it. 
+   *(If you already have a `README.md` file, click on it and select the **✏️ Edit** pencil icon).*
+3. Paste the markdown code above into the editor.
+4. Replace `YOUR_GITHUB_USERNAME` in the clone command with your actual GitHub username.
+5. Select **"Commit directly to the main branch"** and click **Commit changes**.
