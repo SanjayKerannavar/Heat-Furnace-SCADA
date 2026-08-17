@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Enterprise SCADA / MES HMI System</title>
 
+  <!-- Supabase JS Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- CDNs for MQTT & Chart.js -->
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -282,8 +285,6 @@
       border: 1px solid var(--border-color);
       border-radius: 14px;
       padding: 20px;
-      flex: 1;
-      min-height: 320px;
       box-shadow: var(--shadow);
     }
 
@@ -297,6 +298,25 @@
 
     .online { background-color: var(--green-bg); color: var(--green-text); border: 1px solid var(--green-text); }
     .offline { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; }
+
+    /* HISTORY TABLE STYLES */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+    .history-table th {
+      padding: 10px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 11px;
+    }
+    .history-table td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
   </style>
 </head>
 <body>
@@ -419,19 +439,85 @@
     <!-- REAL-TIME GRAPH -->
     <div class="chart-card">
       <div class="card-label" style="margin-bottom: 15px;">Real-Time Temperature Trend (PV vs SV)</div>
-      <canvas id="tempChart"></canvas>
+      <div style="position: relative; height: 300px;">
+        <canvas id="tempChart"></canvas>
+      </div>
     </div>
+
+    <!-- HISTORICAL LOGS FROM SUPABASE DATABASE -->
+    <div class="chart-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div class="card-label">Database Telemetry Logs (Supabase)</div>
+        <button class="icon-btn" onclick="loadHistoricalData()" style="padding: 6px 12px; font-size: 12px;">🔄 Refresh Logs</button>
+      </div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Machine ID</th>
+            <th>Present Value (PV)</th>
+            <th>Set Value (SV)</th>
+          </tr>
+        </thead>
+        <tbody id="history-body">
+          <tr><td colspan="4" style="color: var(--text-muted);">Loading historical database records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
 
   <script>
+    // ----------------------------------------------------
+    // SUPABASE DATABASE INITIALIZATION
+    // ----------------------------------------------------
+    const SUPABASE_URL = 'https://awabocrtooquzbshzsvr.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3YWJvY3J0b29xdXpic2h6c3ZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTI1NDEsImV4cCI6MjEwMjUyODU0MX0.PIFACCVzGmG8UeifvKoJdSJ_zGyKmBWyYeBXSGmByJE';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function loadHistoricalData() {
+      const { data, error } = await db
+        .from('telemetry')
+        .select('created_at, machine_id, pv, sv')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.error('Error fetching telemetry:', error.message);
+        return;
+      }
+
+      const tableBody = document.getElementById('history-body');
+      if (!tableBody) return;
+
+      tableBody.innerHTML = '';
+
+      data.forEach(row => {
+        const time = new Date(row.created_at).toLocaleTimeString();
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${time}</td>
+          <td><strong>${row.machine_id}</strong></td>
+          <td style="color: var(--accent-blue); font-weight: bold;">${row.pv}°C</td>
+          <td style="color: var(--accent-orange); font-weight: bold;">${row.sv}°C</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    // Load initial 10 records from database
+    loadHistoricalData();
+
+    // ----------------------------------------------------
+    // MQTT & REAL-TIME DASHBOARD LOGIC
+    // ----------------------------------------------------
     const BROKER_URL = 'wss://7a629778ebd14dd1866939c6fbfc7b60.s1.eu.hivemq.cloud:8884/mqtt';
     const USERNAME = 'SanjayKerannavar';
-    const PASSWORD = 'Sanjay@123'; // Replace with password
+    const PASSWORD = 'Sanjay@123';
 
     let activeMachine = 'furnace_1';
-    let alarmLogs = []; // Stores complete alarm history for export
+    let alarmLogs = [];
 
-    // LOAD SAVED CUSTOM MACHINE NAMES FROM LOCAL STORAGE IF THEY EXIST
     const savedNames = JSON.parse(localStorage.getItem('scada_machine_names')) || {
       furnace_1: 'Furnace #1',
       furnace_2: 'Furnace #2',
@@ -444,7 +530,6 @@
       furnace_3: { name: savedNames.furnace_3, pv: 0, sv: 40.0, historyPV: [], historySV: [], labels: [] }
     };
 
-    // UPDATE INITIAL UI NAMES FROM STORED DATA
     document.addEventListener("DOMContentLoaded", () => {
       for (const [key, m] of Object.entries(machineData)) {
         const nameElement = document.getElementById(`name-${key}`);
@@ -453,7 +538,6 @@
       document.getElementById('selected-machine-title').innerText = machineData[activeMachine].name;
     });
 
-    // SETUP CHART.JS
     const ctx = document.getElementById('tempChart').getContext('2d');
     const trendChart = new Chart(ctx, {
       type: 'line',
@@ -487,7 +571,6 @@
       }
     });
 
-    // CONNECT MQTT
     const client = mqtt.connect(BROKER_URL, { username: USERNAME, password: PASSWORD, clean: true });
 
     client.on('connect', () => {
@@ -518,7 +601,6 @@
 
           document.getElementById(`sub-${machineKey}`).innerText = `PV: ${payload.pv.toFixed(1)} °C`;
 
-          // HIGH TEMP ALARM LOGIC (> 80°C)
           if (payload.pv > 80.0) {
             triggerAlarm(machineKey, m.name, payload.pv, now);
           } else if (machineKey === activeMachine) {
@@ -534,11 +616,13 @@
             trendChart.data.datasets[1].data = m.historySV;
             trendChart.update();
           }
+
+          // Refresh database log table occasionally on incoming data
+          loadHistoricalData();
         }
       } catch (e) { console.error('Data error:', e); }
     });
 
-    // RENAME MACHINE & SAVE PERSISTENTLY
     function renameMachine(machineKey) {
       const currentName = machineData[machineKey].name;
       const newName = prompt('Enter custom machine name:', currentName);
@@ -551,7 +635,6 @@
           document.getElementById('selected-machine-title').innerText = cleanName;
         }
 
-        // Save to browser localStorage
         const nameMap = {
           furnace_1: machineData.furnace_1.name,
           furnace_2: machineData.furnace_2.name,
@@ -561,7 +644,6 @@
       }
     }
 
-    // SIDEBAR TOGGLE & AUTO-COLLAPSE
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
 
     function selectMachine(machineKey) {
@@ -581,11 +663,9 @@
       trendChart.data.datasets[1].data = m.historySV;
       trendChart.update();
 
-      // AUTO-COLLAPSE SIDEBAR
       document.getElementById('sidebar').classList.add('collapsed');
     }
 
-    // PUBLISH SETPOINT
     function sendSetpoint() {
       const newSV = parseFloat(document.getElementById('new-sv-input').value);
       const topicSV = `factory/${activeMachine}/temp/sv`;
@@ -597,17 +677,14 @@
       alert(`Published Setpoint (${newSV} °C) to ${machineData[activeMachine].name}`);
     }
 
-    // THEMES & FONTS
     function changeTheme(theme) { document.documentElement.setAttribute('data-theme', theme); }
     function changeFont(font) { document.documentElement.setAttribute('data-font', font); }
 
-    // ALARM TRIGGER & HISTORY RECORDING
     function triggerAlarm(machineKey, machineName, temp, timestamp) {
       if (activeMachine === machineKey) {
         document.getElementById('high-temp-alarm').style.display = 'flex';
       }
 
-      // Avoid duplicate spam within the same second
       const existingMsg = alarmLogs.find(a => a.timestamp === timestamp && a.machineKey === machineKey);
       if (!existingMsg) {
         const alarmEntry = { timestamp, machineKey, machineName, temp: temp.toFixed(1) };
@@ -631,7 +708,6 @@
       `).join('');
     }
 
-    // EXPORT ALARMS TO CSV FILE
     function exportAlarmsCSV() {
       if (alarmLogs.length === 0) {
         alert("No alarms recorded yet to export.");
@@ -651,7 +727,6 @@
       a.click();
     }
 
-    // EXPORT FULL TELEMETRY REPORT TO CSV
     function exportCSVReport() {
       let csvContent = "data:text/csv;charset=utf-8,Machine ID,Machine Name,Timestamp,PV (°C),SV (°C)\n";
 
@@ -670,5 +745,6 @@
       document.body.removeChild(link);
     }
   </script>
+
 </body>
 </html>
